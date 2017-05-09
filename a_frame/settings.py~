@@ -150,7 +150,7 @@ ACTION_PROVIDERS = (
         "name": "SaltAction",
         "label": "Executes Salt Stack action",
         "options": [
-	   {
+	{
                 "label": "Type of Salt Action",
                 "name": "action_type",
                 "type": "select",
@@ -164,9 +164,9 @@ ACTION_PROVIDERS = (
                         "name": "subscribe_to_event",
                         "label": "Subscribe to a specific event",
                     }
-                	    ]
-            },
-	    {
+                ]
+            }
+	  {
                 "label": "Username",
                 "name": "username",
                 "type": "text",
@@ -184,7 +184,7 @@ ACTION_PROVIDERS = (
                 "type": "text",
                 "default": "10.1.1.1"
             }
-		]
+]
     },
     {
         "name": "RestAction",
