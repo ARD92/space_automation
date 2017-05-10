@@ -7,6 +7,31 @@ from lxml import etree
 import re
 import json
 
+import pprint as pprint
+import requests, json
+import xml.etree.ElementTree as ET
+from jnpr.junos import Device
+from jnpr.junos import exception
+from jnpr.junos.utils.config import Config
+import urllib3
+
+# Disable warning about SSL
+# If customer's CA is available, check this- http://docs.python-requests.org/en/latest/user/advanced/ to change behaviour
+requests.packages.urllib3.disable_warnings()
+# Username and password to connect to Junos Space
+svcUser = 'super'
+svcPass = 'Juniper123!'
+# default Space server
+jnprServer = 'https://10.8.158.219/'
+# URLs to connect
+# List all devices
+getDeviceURL = jnprServer + 'api/space/device-management/devices'
+# Create Hornet Queue
+createQueueURL = jnprServer + 'api/hornet-q/queues'
+# Config-change
+configChangeURL = jnprServer + 'api/space/configuration-management/change-requests?queue=https://space.pfr.inetsix.net/api/hornet-q/queues/jms.queue.'
+
+
 
 class SpaceAction(ActionBase):
     """
@@ -18,18 +43,11 @@ class SpaceAction(ActionBase):
     dev = None
     request_type = "apply_template"
     result_msg = ""
-
+    
     def set_endpoint(self, endpoint):
-        try:
-            # create the required iterator from the endpoint_list
-            self.dev = Device(user=endpoint["username"], password=endpoint["password"], host=endpoint["ip"])
-            self.dev.open(gather_facts=False)
-
-        except Exception as err:
-            print "Could not open device!"
-            self.result_msg = str(err)
-            self.dev = None
-
+        self.endpoint_ip = endpoint["ip"]
+        #self.endpoint_username = endpoint["username"]
+        #self.endpoint_password = endpoint["password"]
         return
 
     def execute_template(self, template):
@@ -70,70 +88,29 @@ class SpaceAction(ActionBase):
             config_format = "text"
 
         print "using format: " + config_format
-        cu = Config(self.dev)
-        try:
-            cu.lock()
-        except LockError as le:
-            print "Could not lock database!"
-            print str(le)
-            self.dev.close()
-            return "Failed to lock configuration database! %s" % str(le)
+
+        
 
         try:
-            print "loading config"
-            cu.load(conf_string, format=config_format)
-        except Exception as e:
-            print "Could not load configuration"
-            print str(e)
-            try:
-                cu.unlock()
-            except UnlockError as ue:
-                print str(ue)
+            # create the required iterator from the endpoint_list
+            print 'Getting device ID based on its managed IP: 10.8.106.70'
+            device = getDeviceID(self.endpoint_ip)
+            if device is not False:
+                print ' * Found device ' + str(device['name']) + ' with reference: ' + str(device['key'])
+                print 'Create queue to host async job with API: jnprQueue'
+                if (createHornetQueue('jnprQueue') is True):
+                    jobId = pushConfig(deviceId=str(device['key']))
+                    print 'Change is in progress - check job ID ' + str(jobId)
+            else:
+                print ' * Device not found'
 
-            self.dev.close()
-            return "Failed, could not load the configuration template. %s" % str(e)
+        except Exception as err:
+            print "Could not get JobID from management IP!"
+            self.result_msg = str(err)
+            self.dev = None
 
-        diff = cu.diff()
-        print diff
-        if diff is not None:
-            try:
-                cu.commit_check()
-                print "Committing config!"
-                cu.commit(comment="Commit via a_frame")
-
-            except CommitError as ce:
-                print "Could not load config! %s" % str(ce)
-                cu.rollback()
-                try:
-                    print "Unlocking database!"
-                    cu.unlock()
-                except UnlockError as ue:
-                    print "Could not unlock database"
-                    print str(ue)
-                print repr(ce)
-                self.dev.close()
-                return "Failed, commit check failed. %s" % str(ce)
-
-        else:
-            # nothing to commit
-            print "Nothing to commit - no diff found"
-            cu.unlock()
-            self.dev.close()
-            return "Nothing to commit!"
-
-        try:
-            print "Unlocking database!"
-            cu.unlock()
-        except UnlockError as ue:
-            print "Could not unlock database"
-            print str(ue)
-            self.dev.close()
-            return "Committed, but could not unlock db"
-
-        print "Closing device handle"
-        self.dev.close()
-        return "Completed with diff: %s" % diff
-
+        return
+    
     @staticmethod
     def unescape(s):
         s = s.replace("&lt;", "<")
@@ -173,3 +150,65 @@ class SpaceAction(ActionBase):
 
         print "no special formatting, returning"
         return results
+    
+    def getDeviceID(self, ip):
+    # Collect information from space
+        getDevices = requests.get(getDeviceURL, auth=(svcUser, svcPass), verify=False,
+                              headers={
+                                  'Accept': 'application/vnd.net.juniper.space.device-management.devices+xml;version=1'})
+    # Parse result as an XML Tree
+        xmlRoot = ET.fromstring(getDevices.text)
+        for neighbor in xmlRoot.findall('device'):
+        # Extract basic information from XML result
+            name = neighbor.find('name').text
+            key = neighbor.get('key')
+            ipAddr = neighbor.find('ipAddr').text
+            uri = neighbor.get('uri')
+        # If hostname is equal to device we want to manage, we collect information and send them back
+            if ipAddr == ip:
+                result = {}
+                result['name'] = name
+                result['key'] = key
+                result['uri'] = uri
+                return result
+        return False
+    
+    
+    
+    def createHornetQueue(self, queue):
+        queueCreation = "<queue name=\"" + queue + "\"><durable>false</durable></queue>"
+        createQueue = requests.post(createQueueURL, auth=(svcUser, svcPass), verify=False,
+                                headers={'Content-Type': 'application/hornetq.jms.queue+xml'},
+                                data=queueCreation)
+    # Check status code to ensure Queue is present on space server
+        if createQueue.status_code == 201:
+        # print 'Queue '+queue+' has been created'
+            return True
+        elif createQueue.status_code == 412:
+        # print 'Queue was already configured'
+            return True
+        else:
+            print '[Error] - Cannot create Queue ' + queue
+    # Default: return false
+        return False
+    
+    
+    def pushConfig(self, deviceId="458780", queue="jnprQueue"):
+    # Static configuration template to use
+        template = "<change-request><name>Change Hostname</name><description>Change hostname of a Junos device</description><xmlData><![CDATA[<configuration>  <system>   <host-name>EX4200_S70_updated_on_may_9</host-name>  </system></configuration>]]></xmlData><device href=\"/api/space/device-management/devices/" + deviceId + "\"/>  <syncAfterPush>" + 'true' + "</syncAfterPush>  </change-request>"
+    #template = "<change-request><name>Set Vlan</name><description>Set Vlan of a Junos device</description><xmlData><![CDATA[<configuration>  <vlans>  <vlan> <name>vlanfrompython</name>   <vlan-id>111</vlan-id>  </vlan>   </vlans>   </configuration>]]></xmlData><device href=\"/api/space/device-management/devices/" + deviceId + "\"/>  <syncAfterPush>" + 'true' + "</syncAfterPush>  </change-request>"
+    #template = "<change-request><name>Change Hostname</name><description>Change hostname of a Junos device</description><xmlData><![CDATA[<configuration>  <system>   <host-name>EX4200_S70_updated_frm_Python</host-name>  </system></configuration>]]></xmlData><device href=\"/api/space/device-management/devices/" + deviceId + "\"/>  <syncAfterPush>" + 'true' + "</syncAfterPush>  </change-request>"
+        print template
+    ### Forge URL to consume API using custom queue:
+        configChangePOST = configChangeURL + queue
+    ### Consume Space API with a POST command:
+        changeConfig = requests.post(configChangePOST, auth=(svcUser, svcPass), verify=False,
+                                 headers={
+                                     'Content-Type': 'application/vnd.net.juniper.space.configuration-management.change-request+xml;version=1;charset=UTF-8'},
+                                 data=template)
+        print changeConfig.text
+    # <?xml version="1.0" encoding="UTF-8" standalone="yes"?><task href="/api/space/job-management/jobs/526890"><id>526890</id></task>#
+        xmlRoot = ET.fromstring(changeConfig.text)
+        for task in xmlRoot.findall('id'):
+            jobId = task.text
+            return jobId
