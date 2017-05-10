@@ -103,6 +103,24 @@ REGISTERED_ENDPOINT_PROVIDERS = (
     }
 )
 ACTION_PROVIDERS = (
+	{
+        "name": "SpaceAction",
+        "label": "SpaceAction",
+        "options": [
+            {
+                "label": "Request Type",
+                "name": "request_type",
+                "type": "select",
+                "choices": [
+                    {
+                        "name": "apply_template",
+                        "label": "Apply Configuration",
+                        "arguments": []
+                    },
+                ]
+            }
+        ]
+	},
     {
         "name": "NetconfAction",
         "label": "NetConf",
