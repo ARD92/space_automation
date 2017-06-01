@@ -478,8 +478,6 @@ def apply_template_to_queue(request):
         results += "================ %s ================\n" % endpoint["name"]
         action.set_endpoint(endpoint)
         result = action.execute_template(completed_template)
-	if result == None:
-		result=''
         results += result
         results += "\n"
 

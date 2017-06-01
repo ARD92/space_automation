@@ -71,7 +71,7 @@ class SpaceAction(ActionBase):
     def apply_template(self, template):
 	print 'entering apply_template function'
         print self.dev
-        conf_string = template.strip()
+        conf_string = template.replace(" ", "")
 
         print conf_string
 
