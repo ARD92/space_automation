@@ -1,6 +1,4 @@
-# A-Frame Tutorial
-
-[GIT Hub Repository: https://github.com/nembery/aframe](https://github.com/nembery/aframe)
+# Automation Tutorial
 
 
 ### Installing package requirements
@@ -148,7 +146,7 @@ Quit the server with CONTROL-C.
 
 <br><br>
 
-### Accessing A-Frame interface
+### Accessing Web interface
 
 - Open your browser and access the URL: `http://<SERVER_IP>:8080`
 
@@ -212,8 +210,8 @@ The format of the CSV file is like this:
 
 |ID |Router Name|    Router IP   |  Username  | Password | Device Type|
 |---|-----------|----------------|------------|----------|------------|
-| 1 |  vmx1     | 10.254.254.100 | dmontagner | diogo123 | junos      |
-| 2 |  vmx2     | 10.254.254.200 | dmontagner | diogo123 | junos      |
+| 1 |  vmx1     | 10.254.254.100 | akshay | diogo123 | junos      |
+| 2 |  vmx2     | 10.254.254.200 | akshay | diogo123 | junos      |
 
 <br><br>
 
@@ -221,7 +219,7 @@ Below is the CSV file used in this tutorial
 
 ```
 # id,name,ip,username,password,type
-1,vmx1,10.254.254.100,dmontagner,diogo123,junos
+1,vmx1,10.254.254.100,akshay,diogo123,junos
 ```
 
 <br><br>
@@ -416,7 +414,7 @@ be used to execute this deployment
 - Let's check in the router:
 
 ```
-dmontagner@vmx1> show configuration routing-instances
+akshay@vmx1> show configuration routing-instances
 VPN1 {
     instance-type vrf;
     interface ge-0/0/1.100;
@@ -434,7 +432,7 @@ VPN1 {
     }
 }
 
-dmontagner@vmx1> show configuration interfaces ge-0/0/1
+akshay@vmx1> show configuration interfaces ge-0/0/1
 flexible-vlan-tagging;
 unit 100 {
     vlan-id 100;
@@ -443,5 +441,6 @@ unit 100 {
     }
 }
 
-dmontagner@vmx1>
+akshay@vmx1>
 ```
+Note: Original document forked from nembery's git repo and tailored to suit my test environment.
